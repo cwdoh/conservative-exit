@@ -1,0 +1,113 @@
+{
+	"EXITED": {
+		"transitions": [
+			{
+				"input": {
+					"enter": true
+				},
+				"transiteTo": "ENTER"
+			},
+			{
+				"input": {
+					"enter": false,
+					"cushion": false,
+					"exit": false
+				},
+				"transiteTo": "NO_SIGNAL_AFTER_EXITED"
+			}
+		]
+	},
+	"NO_SIGNAL_AFTER_EXITED": {
+		"transitions": [
+			{
+				"input": {
+					"enter": true
+				},
+				"transiteTo": "ENTER"
+			},
+			{
+				"input": {
+					"cushion": true
+				},
+				"transiteTo": "EXITED"
+			},
+			{
+				"input": {
+					"exit": true
+				},
+				"transiteTo": "EXITED"
+			}
+		]
+	},
+	"ENTER": {
+		"callbackEnabled": true
+	},
+	"ENTERED": {
+		"transitions": [
+			{
+				"input": {
+					"enter": true
+				},
+				"transiteTo": "ENTERED"
+			},
+			{
+				"input": {
+					"cushion": true
+				},
+				"transiteTo": "ENTERED"
+			},
+			{
+				"input": {
+					"enter": false,
+					"cushion": false,
+					"exit": false
+				},
+				"transiteTo": "NO_SIGNAL_AFTER_ENTERED"
+			},
+			{
+				"input": {
+					"enter": false,
+					"cushion": false,
+					"exit": true
+				},
+				"transiteTo": "EXIT"
+			}
+		]
+	},
+	"NO_SIGNAL_AFTER_ENTERED": {
+		"transitions": [
+			{
+				"input": {
+					"enter": false,
+					"cushion": false,
+					"exit": false
+				},
+				"transiteTo": "NO_SIGNAL_AFTER_ENTERED"
+			},
+			{
+				"input": {
+					"enter": true
+				},
+				"transiteTo": "ENTERED"
+			},
+			{
+				"input": {
+					"cushion": true
+				},
+				"transiteTo": "ENTERED"
+			},
+			{
+				"input": {
+					"enter": false,
+					"cushion": false,
+					"exit": true
+				},
+				"transiteTo": "EXITED"
+			}
+		],
+		"callbackEnabled": true
+	},
+	"EXIT": {
+		"callbackEnabled": true
+	}
+}

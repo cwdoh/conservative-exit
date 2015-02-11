@@ -4,11 +4,12 @@
 	// 	type: '{{String}}',		// accept, start
 	// 	name: '{{String}}',		// name of state
 	// 	input: {{Function}},	// input function
-	// 	entryCallback: {{Function}},	// callback function, called when entering the state.
-	// 	exitCallback: {{Function}}		// callback function, called when exiting the state.
+	// 	entry: {{Function}},	// callback function, called when entering the state.
+	// 	exit: {{Function}}		// callback function, called when exiting the state.
 	// }
 
 	var fsm = (function(states, start) {
+		// State parts
 		var _State = function(stateInfo) {
 			this.state = stateInfo;
 
@@ -17,37 +18,59 @@
 
 		// callback: entry
 		_State.prototype.entryCallback = function() {
-			if (typeof(this.state.entryCallback) == 'function') {
-				this.state.entryCallback.apply(this.state, Array.prototype.slice.apply(arguments));
+			if (typeof(this.state.callbacks.entry) == 'function') {
+				var args = [].concat(Array.prototype.slice.apply(arguments));
+				this.state.callbacks.entry.apply(this, args);
 			}
 		};
 		
 		// callback: exits
 		_State.prototype.exitCallback = function() {
-			if (typeof(this.state.exitCallback) == 'function') {
-				this.state.exitCallback.apply(this.state, Array.prototype.slice.apply(arguments));
+			if (typeof(this.state.callbacks.exit) == 'function') {
+				var args = [].concat(Array.prototype.slice.apply(arguments));
+				this.state.callbacks.exit.apply(this, args);
 			}
+		};
+
+		_State.prototype.doTransitionTo = function(stateName) {
+			var oldState = getState();
+			if (oldState) {
+				// try transtion
+				if (setState(stateName)) {
+					// firstly, call exit callback
+					oldState.exitCallback.apply(oldState, []);
+
+					// lastly, call entry callback
+					getState().entryCallback.apply(getState(), []);
+
+					return true;
+				}
+			}
+			return false;
 		};
 
 		var fsmObject = {};
 
 		for( state in states ) {
-			console.log(JSON.stringify(states[state], null, '\t'));
 			fsmObject[state] = new _State(states[state]);
 		}
 
 		// set current state without any default action of each state.
 		var currentState = null;
-		fsmObject.setState = function(stateName) {
+		var setState = function(stateName) {
 			if (stateName in fsmObject) {
 				currentState = fsmObject[stateName];
+
+				return currentState;
 			}
+
+			return null;
 		};
 
-		fsmObject.setState(start);
+		setState(start);
 
 		// get state instance of given name
-		fsmObject.getState = function(stateName) {
+		var getState = function(stateName) {
 			if (!stateName) {
 				return currentState;
 			}
@@ -59,101 +82,236 @@
 			return null;
 		};
 
-		_State.prototype.doTransition = function() {
-			if (currentState) {
-				if (stateName in fsmObject) {
-					// firstly, call exit callback
-					currentState.exitCallback.apply(currentState, [sdk]);
+		var processInput = function(inputs) {
+			var state = getState().state;
 
-					// transtion
-					currentState = fsmObject[this.state.transiteTo];
+			// converts every value to boolean in inputs
+			for (var key in inputs) {
+				inputs[key] = !!inputs[key];
+			}
 
-					// lastly, call entry callback
-					currentState.entryCallback.apply(currentState, [sdk]);
+			var checkCondition = function(source, condition) {
+				for (var key in condition) {
+					if (key in source) {
+						if (source[key] != condition[key]) {
+							return false;
+						}
+					}
+					else {
+						return false;
+					}
+				}
 
-					return true;
+				return true;
+			};
+
+			// doing auto transition
+			if ("transitions" in state) {
+				for(var idx = 0 ; idx < state.transitions.length ; idx ++) {
+					var transition = state.transitions[idx];
+					// if inputs satisfied to transition condition
+					if (checkCondition(inputs, transition.inputs)) {
+						// do transition
+						getState().doTransitionTo(transition.transiteTo);
+						return;
+					}
 				}
 			}
-			return false;
-		};
 
-		// SDK Parts
-		var sendTrigger = function(event) {
-			console.log('Trigger: ' + event);
-		};
-
-		var log = function(logText) {
-			console.log(logText);
-		};
-
-		var sdk = {
-			log: log,
-			sendTrigger: sendTrigger
-		};
-
-		return fsmObject;
-	})({
-		"EXIT": {
-			transitionCallback: function() {
-			},
-			entryCallback: function(sdk) {
-				sdk.log('Enter the state: ' + this.name);
-				sdk.doTranstionTo('EXITED');
-			},
-			exitCallback: function(sdk) {
-				sdk.log('Exit the state: ' + this.name);
+			// doing custom transition if callbackEnabled is true
+			if (state.callbackEnabled) {
+				if (typeof(state.callbacks.custom) == 'function') {
+					// transtion by user defined function
+					state.callbacks.custom.apply(state, [inputs]);
+				}
 			}
-		},
+		};
+
+		return {
+			setState: setState,
+			getState: getState,
+			processInput: processInput
+		};
+	})
+	({
 		"EXITED": {
-			entryCallback: function(sdk) {
-				sdk.log('Enter the state: ' + this.name);
-			},
-			exitCallback: function(sdk) {
-				sdk.log('Exit the state: ' + this.name);
+			"name": "EXITED",
+			"transitions": [
+				{
+					"inputs": {
+						"enter": true
+					},
+					"transiteTo": "ENTER"
+				},
+				{
+					"inputs": {
+						"enter": false,
+						"cushion": false,
+						"exit": false
+					},
+					"transiteTo": "NO_SIGNAL_AFTER_EXITED"
+				}
+			],
+			"callbacks": {
+				entry: function() {
+					console.log('Enter the state: ' + this.state.name);
+				},
+				exit: function() {
+					console.log('Exit the state: ' + this.state.name);
+				}
 			}
 		},
 		"NO_SIGNAL_AFTER_EXITED": {
-			entryCallback: function(sdk) {
-				sdk.log('Enter the state: ' + this.name);
-			},
-			exitCallback: function(sdk) {
-				sdk.log('Exit the state: ' + this.name);
+			"name": "NO_SIGNAL_AFTER_EXITED",
+			"transitions": [
+				{
+					"inputs": {
+						"enter": true
+					},
+					"transiteTo": "ENTER"
+				},
+				{
+					"inputs": {
+						"cushion": true
+					},
+					"transiteTo": "EXITED"
+				},
+				{
+					"inputs": {
+						"exit": true
+					},
+					"transiteTo": "EXITED"
+				}
+			],
+			"callbacks": {
+				entry: function() {
+					console.log('Enter the state: ' + this.state.name);
+				},
+				exit: function() {
+					console.log('Exit the state: ' + this.state.name);
+				}
 			}
 		},
 		"ENTER": {
-			transitionCallback: function() {
-			},
-			entryCallback: function(sdk) {
-				sdk.log('Enter the state: ' + this.name);
-				sdk.sendTrigger('Enter');
-				sdk.doTranstionTo('ENTERED');
-			},
-			exitCallback: function(sdk) {
-				sdk.log('Exit the state: ' + this.name);
+			"name": "ENTER",
+			"callbackEnabled": true,
+			"callbacks": {
+				custom: function() {
+				},
+				entry: function() {
+					console.log('Enter the state: ' + this.state.name);
+					console.log('sendTrigger: Enter');
+					this.doTranstionTo('ENTERED');
+				},
+				exit: function() {
+					console.log('Exit the state: ' + this.state.name);
+				}
 			}
 		},
 		"ENTERED": {
-			entryCallback: function(sdk) {
-				sdk.log('Enter the state: ' + this.name);
-			},
-			exitCallback: function(sdk) {
-				sdk.log('Exit the state: ' + this.name);
+			"name": "ENTERED",
+			"transitions": [
+				{
+					"inputs": {
+						"enter": true
+					},
+					"transiteTo": "ENTERED"
+				},
+				{
+					"inputs": {
+						"cushion": true
+					},
+					"transiteTo": "ENTERED"
+				},
+				{
+					"inputs": {
+						"enter": false,
+						"cushion": false,
+						"exit": false
+					},
+					"transiteTo": "NO_SIGNAL_AFTER_ENTERED"
+				},
+				{
+					"inputs": {
+						"enter": false,
+						"cushion": false,
+						"exit": true
+					},
+					"transiteTo": "EXIT"
+				}
+			],
+			"callbacks": {
+				entry: function() {
+					console.log('Enter the state: ' + this.state.name);
+				},
+				exit: function() {
+					console.log('Exit the state: ' + this.state.name);
+				}
 			}
 		},
 		"NO_SIGNAL_AFTER_ENTERED": {
-			transitionCallback: function() {
-			},
-			entryCallback: function(sdk) {
-				sdk.log('Enter the state: ' + this.name);
-				setTimeout( function() {
-					sdk.sendTrigger('Exit');
-					sdk.doTranstionTo('EXIT');
-				}, 10 * 1000 )
-			},
-			exitCallback: function(sdk) {
-				sdk.log('Exit the state: ' + this.name);
+			"name": "NO_SIGNAL_AFTER_ENTERED",
+			"transitions": [
+				{
+					"inputs": {
+						"enter": false,
+						"cushion": false,
+						"exit": false
+					},
+					"transiteTo": "NO_SIGNAL_AFTER_ENTERED"
+				},
+				{
+					"inputs": {
+						"enter": true
+					},
+					"transiteTo": "ENTERED"
+				},
+				{
+					"inputs": {
+						"cushion": true
+					},
+					"transiteTo": "ENTERED"
+				},
+				{
+					"inputs": {
+						"enter": false,
+						"cushion": false,
+						"exit": true
+					},
+					"transiteTo": "EXITED"
+				}
+			],
+			"callbackEnabled": true,
+			"callbacks": {
+				custom: function() {
+				},
+				entry: function() {
+					console.log('Enter the state: ' + this.state.name);
+					setTimeout( function() {
+						console.log('sendTrigger: Exit');
+						this.doTranstionTo('EXIT');
+					}, 10 * 1000 )
+				},
+				exit: function() {
+					console.log('Exit the state: ' + this.state.name);
+				}
 			}
 		},
+		"EXIT": {
+			"name": "EXIT",
+			"callbackEnabled": true,
+			"callbacks": {
+				custom: function() {
+				},
+				entry: function(sdk) {
+					console.log('Enter the state: ' + this.state.name);
+					this.doTranstionTo('EXITED');
+				},
+				exit: function(sdk) {
+					console.log('Exit the state: ' + this.state.name);
+				}
+			}
+		}
 	}, 'EXITED');
 
 	module.exports = fsm;
