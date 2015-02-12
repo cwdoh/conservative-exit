@@ -201,7 +201,7 @@
 				entry: function() {
 					console.log('Enter the state: ' + this.state.name);
 					console.log('sendTrigger: Enter');
-					this.doTranstionTo('ENTERED');
+					this.doTransitionTo('ENTERED');
 				},
 				exit: function() {
 					console.log('Exit the state: ' + this.state.name);
@@ -282,20 +282,28 @@
 				}
 			],
 			"callbackEnabled": true,
-			"callbacks": {
-				custom: function() {
-				},
-				entry: function() {
-					console.log('Enter the state: ' + this.state.name);
-					setTimeout( function() {
-						console.log('sendTrigger: Exit');
-						this.doTranstionTo('EXIT');
-					}, 10 * 1000 )
-				},
-				exit: function() {
-					console.log('Exit the state: ' + this.state.name);
-				}
-			}
+			"callbacks": (function() {
+				var timer = null;
+				return {
+					custom: function() {
+					},
+					entry: function() {
+						console.log('Enter the state: ' + this.state.name);
+
+						var _self = this;
+						timer = setTimeout( function() {
+							_self.doTransitionTo('EXIT');						
+						}, 10 * 1000 )
+					},
+					exit: function() {
+						console.log('Exit the state: ' + this.state.name);
+						if (timer) {
+							clearTimeout(timer);
+							timer = null;
+						}
+					}
+				};
+			})()
 		},
 		"EXIT": {
 			"name": "EXIT",
@@ -305,7 +313,8 @@
 				},
 				entry: function(sdk) {
 					console.log('Enter the state: ' + this.state.name);
-					this.doTranstionTo('EXITED');
+					console.log('sendTrigger: Exit');
+					this.doTransitionTo('EXITED');
 				},
 				exit: function(sdk) {
 					console.log('Exit the state: ' + this.state.name);
